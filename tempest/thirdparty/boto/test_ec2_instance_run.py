@@ -88,6 +88,62 @@ class InstanceRunTest(BotoTestCase):
                                                            image["image_id"])
 
     @attr(type='smoke')
+    def test_run_stop_terminate_idempotent_instances(self):
+        # EC2 run, stop and terminate instance
+
+        # need to try this with deleted instances too.
+
+        image_ami = self.ec2_client.get_image(self.images["ami"]
+                                              ["image_id"])
+
+        reservations = []
+        reservations.append(self.ec2_client.run_instances(
+                image_id=self.images["ami"]["image_id"],
+                kernel_id=self.images["aki"]["image_id"],
+                ramdisk_id=self.images["ari"]["image_id"],
+                instance_type=self.instance_type,
+                client_token='ct-instance-1'
+                ))
+
+        reservations.append(self.ec2_client.run_instances(
+                image_id=self.images["ami"]["image_id"],
+                kernel_id=self.images["aki"]["image_id"],
+                ramdisk_id=self.images["ari"]["image_id"],
+                instance_type=self.instance_type,
+                client_token='ct-instance-2'
+                ))
+
+        reservations.append(self.ec2_client.run_instances(
+                image_id=self.images["ami"]["image_id"],
+                kernel_id=self.images["aki"]["image_id"],
+                ramdisk_id=self.images["ari"]["image_id"],
+                instance_type=self.instance_type,
+                client_token='ct-instance-1'
+                ))
+
+        self.assertEqual(len(reservations), 3)
+        self.assertEqual(reservations[0].id, reservations[2].id)
+
+        for reservation in reservations[0:2]:
+            rcuk = self.addResourceCleanUp(self.destroy_reservation, reservation)
+            for instance in reservation.instances:
+                LOG.info("state: %s", instance.state)
+                if instance.state != "running":
+                    self.assertInstanceStateWait(instance, "running")
+
+            for instance in reservation.instances:
+                instance.stop()
+                LOG.info("state: %s", instance.state)
+                if instance.state != "stopped":
+                    self.assertInstanceStateWait(instance, "stopped")
+
+            for instance in reservation.instances:
+                instance.terminate()
+
+        self.cancelResourceCleanUp(rcuk)
+
+
+    @attr(type='smoke')
     def test_run_stop_terminate_instance(self):
         # EC2 run, stop and terminate instance
         image_ami = self.ec2_client.get_image(self.images["ami"]
