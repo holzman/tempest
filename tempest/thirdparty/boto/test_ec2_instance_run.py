@@ -89,9 +89,7 @@ class InstanceRunTest(BotoTestCase):
 
     @attr(type='smoke')
     def test_run_stop_terminate_idempotent_instances(self):
-        # EC2 run, stop and terminate instance
-
-        # need to try this with deleted instances too.
+        # EC2 run, stop and terminate instances idempotently
 
         image_ami = self.ec2_client.get_image(self.images["ami"]
                                               ["image_id"])
@@ -122,10 +120,11 @@ class InstanceRunTest(BotoTestCase):
                 ))
 
         self.assertEqual(len(reservations), 3)
+
+        # same reservation for ct-instance-1
         self.assertEqual(reservations[0].id, reservations[2].id)
 
-        for reservation in reservations[0:2]:
-            rcuk = self.addResourceCleanUp(self.destroy_reservation, reservation)
+        def _stop_and_terminate(reservation):
             for instance in reservation.instances:
                 LOG.info("state: %s", instance.state)
                 if instance.state != "running":
@@ -140,8 +139,26 @@ class InstanceRunTest(BotoTestCase):
             for instance in reservation.instances:
                 instance.terminate()
 
-        self.cancelResourceCleanUp(rcuk)
+        # terminate all instances
+        for reservation in reservations[0:2]:
+            rcuk = self.addResourceCleanUp(self.destroy_reservation, reservation)
+            _stop_and_terminate(reservation)
 
+        new_reservation = self.ec2_client.run_instances(
+                image_id=self.images["ami"]["image_id"],
+                kernel_id=self.images["aki"]["image_id"],
+                ramdisk_id=self.images["ari"]["image_id"],
+                instance_type=self.instance_type,
+                client_token='ct-instance-1'
+                )
+
+        # make sure we don't get the old reservation back
+        self.assertNotEqual(reservations[0].id, new_reservation.id)
+
+        # stop and terminate
+        _stop_and_terminate(reservation)
+
+        self.cancelResourceCleanUp(rcuk)
 
     @attr(type='smoke')
     def test_run_stop_terminate_instance(self):
