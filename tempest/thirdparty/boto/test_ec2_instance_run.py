@@ -91,33 +91,34 @@ class InstanceRunTest(BotoTestCase):
     def test_run_stop_terminate_idempotent_instances(self):
         # EC2 run, stop and terminate instances idempotently
 
-        image_ami = self.ec2_client.get_image(self.images["ami"]
-                                              ["image_id"])
-
         reservations = []
-        reservations.append(self.ec2_client.run_instances(
+        reservations.append(
+            self.ec2_client.run_instances(
                 image_id=self.images["ami"]["image_id"],
                 kernel_id=self.images["aki"]["image_id"],
                 ramdisk_id=self.images["ari"]["image_id"],
                 instance_type=self.instance_type,
-                client_token='ct-instance-1'
-                ))
+                client_token='ct-instance-1'))
 
-        reservations.append(self.ec2_client.run_instances(
+        reservations.append(
+            self.ec2_client.run_instances(
                 image_id=self.images["ami"]["image_id"],
                 kernel_id=self.images["aki"]["image_id"],
                 ramdisk_id=self.images["ari"]["image_id"],
                 instance_type=self.instance_type,
-                client_token='ct-instance-2'
-                ))
+                client_token='ct-instance-2'))
 
-        reservations.append(self.ec2_client.run_instances(
+        reservations.append(
+            self.ec2_client.run_instances(
                 image_id=self.images["ami"]["image_id"],
                 kernel_id=self.images["aki"]["image_id"],
                 ramdisk_id=self.images["ari"]["image_id"],
                 instance_type=self.instance_type,
-                client_token='ct-instance-1'
-                ))
+                client_token='ct-instance-1'))
+
+        for reservation in reservations:
+            rcuk = self.addResourceCleanUp(self.destroy_reservation,
+                                           reservation)
 
         self.assertEqual(len(reservations), 3)
 
@@ -141,17 +142,19 @@ class InstanceRunTest(BotoTestCase):
 
         # terminate all instances
         for reservation in reservations[0:2]:
-            rcuk = self.addResourceCleanUp(self.destroy_reservation, reservation)
             _stop_and_terminate(reservation)
 
-        new_reservation = self.ec2_client.run_instances(
-                image_id=self.images["ami"]["image_id"],
-                kernel_id=self.images["aki"]["image_id"],
-                ramdisk_id=self.images["ari"]["image_id"],
-                instance_type=self.instance_type,
-                client_token='ct-instance-1'
-                )
+        self.cancelResourceCleanUp(rcuk)
 
+        new_reservation = self.ec2_client.run_instances(
+            image_id=self.images["ami"]["image_id"],
+            kernel_id=self.images["aki"]["image_id"],
+            ramdisk_id=self.images["ari"]["image_id"],
+            instance_type=self.instance_type,
+            client_token='ct-instance-1')
+
+        rcuk = self.addResourceCleanUp(self.destroy_reservation,
+                                       new_reservation)
         # make sure we don't get the old reservation back
         self.assertNotEqual(reservations[0].id, new_reservation.id)
 
