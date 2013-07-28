@@ -89,3 +89,7 @@ class RemoteClient():
         # usually to /dev/ttyS0
         cmd = 'sudo sh -c "echo \\"%s\\" >/dev/console"' % message
         return self.ssh_client.exec_command(cmd)
+
+    def poweroff(self):
+        cmd = 'sudo /sbin/poweroff'
+        return self.ssh_client.exec_command(cmd)

@@ -135,6 +135,48 @@ class InstanceRunTest(BotoTestCase):
         _terminate_reservation(reservation_3, rcuk_3)
 
     @attr(type='smoke')
+    def test_instance_initiated_shutdown(self):
+        reservation = self.ec2_client.run_instances(
+            image_id=self.images["ami"]["image_id"],
+            kernel_id=self.images["aki"]["image_id"],
+            ramdisk_id=self.images["ari"]["image_id"],
+            instance_type=self.instance_type,
+            key_name=self.keypair_name,
+            instance_initiated_shutdown_behavior='terminate')
+        rcuk_term = self.addResourceCleanUp(self.destroy_reservation,
+                                       reservation)
+
+        instance_term = reservation.instances[0]
+
+        reservation = self.ec2_client.run_instances(
+            image_id=self.images["ami"]["image_id"],
+            kernel_id=self.images["aki"]["image_id"],
+            ramdisk_id=self.images["ari"]["image_id"],
+            instance_type=self.instance_type,
+            key_name=self.keypair_name,
+            instance_initiated_shutdown_behavior='stop')
+        rcuk_stop = self.addResourceCleanUp(self.destroy_reservation,
+                                       reservation)
+
+        instance_stop = reservation.instances[0]
+
+        for instance in (instance_stop, instance_term):
+            if instance.state != "running":
+                self.assertInstanceStateWait(instance, "running")
+
+            ssh = RemoteClient(instance.private_ip_address,
+                               self.os.config.compute.ssh_user,
+                               pkey=self.keypair.material)
+            ssh.poweroff()
+
+        self.assertInstanceStateWait(instance_stop, "stopped")
+        instance_stop.terminate()
+        self.cancelResourceCleanUp(rcuk_stop)
+
+        self.assertInstanceStateWait(instance_term, "_GONE")
+        self.cancelResourceCleanUp(rcuk_term)
+
+    @attr(type='smoke')
     def test_run_stop_terminate_instance(self):
         # EC2 run, stop and terminate instance
         image_ami = self.ec2_client.get_image(self.images["ami"]
